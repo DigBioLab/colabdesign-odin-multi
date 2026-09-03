@@ -95,28 +95,99 @@ class _af_utils:
   #-------------------------------------
   # plotting functions
   #-------------------------------------
+
   def animate(self, s=0, e=None, dpi=100, get_best=True, traj=None, aux=None, color_by="plddt"):
-    '''
+    """
     animate the trajectory
-    - use [s]tart and [e]nd to define range to be animated
-    - use dpi to specify the resolution of animation
-    - color_by = ["plddt","chain","rainbow"]
-    '''
+    """
     if aux is None:
-      aux = self._tmp["best"]["aux"] if (get_best and "aux" in self._tmp["best"]) else self.aux
-    aux = aux["all"]    
-    if self.protocol in ["fixbb","binder"]:
-      pos_ref = self._inputs["batch"]["all_atom_positions"][:,1].copy()
-      pos_ref[(pos_ref == 0).any(-1)] = np.nan
+        aux = self._tmp["best"]["aux"] if (get_best and "aux" in self._tmp["best"]) else self.aux
+    aux = aux["all"]  # stacked across models
+
+    # 1) main reference
+    if self.protocol in ["fixbb", "binder"]:
+        pos_ref = self._inputs["batch"]["all_atom_positions"][:, 1].copy()
+        pos_ref[(pos_ref == 0).any(-1)] = np.nan
     else:
-      pos_ref = aux["atom_positions"][0,:,1,:]
+        pos_ref = aux["atom_positions"][0, :, 1, :]
 
-    if traj is None: traj = self._tmp["traj"]
-    sub_traj = {k:v[s:e] for k,v in traj.items()}
+    # 2) main trajectory
+    if traj is None:
+        traj = self._tmp["traj"]
+    sub_traj = {k: v[s:e] for k,v in traj.items()}
 
-    align_xyz = self.protocol == "hallucination"
-    return make_animation(**sub_traj, pos_ref=pos_ref, length=self._lengths,
-                          color_by=color_by, align_xyz=align_xyz, dpi=dpi) 
+    # 3) Gather each off-target's reference + sub-traj
+    extra_pos_refs = []
+    extra_xyz      = []
+    extra_plddt    = []
+    extra_pae      = []
+
+    if hasattr(self, "_offtargets") and self._offtargets:
+        for offdict in self._offtargets:
+            # reference
+            if "batch" in offdict["inputs"] and "all_atom_positions" in offdict["inputs"]["batch"]:
+                pos_i = offdict["inputs"]["batch"]["all_atom_positions"][:,1].copy()
+                pos_i[(pos_i == 0).any(-1)] = np.nan
+            else:
+                pos_i = None
+            extra_pos_refs.append(pos_i)
+
+            # retrieve off-target traj from offdict["_tmp"]["traj"]
+            if "_tmp" in offdict and "traj" in offdict["_tmp"]:
+                off_traj = offdict["_tmp"]["traj"]
+                sub_off = {k: v[s:e] for k,v in off_traj.items()}
+                extra_xyz.append(sub_off.get("xyz", []))
+                extra_plddt.append(sub_off.get("plddt", []))
+                extra_pae.append(sub_off.get("pae", []))
+            else:
+                # no data
+                extra_xyz.append([])
+                extra_plddt.append([])
+                extra_pae.append([])
+    else:
+        # no multi-offtargets
+        pass
+
+    # 4) alignment logic (example for hallucination)
+    align_xyz = (self.protocol == "hallucination")
+
+    # 5) Build task names and roles from actual storage locations
+    task_names = [self.name] if hasattr(self, 'name') else []
+    task_roles_short = []
+    if hasattr(self, 'role'):
+        task_roles_short.append('t' if self.role == 'target' else 'o')
+
+    if hasattr(self, "_offtargets") and self._offtargets:
+        for offdict in self._offtargets:
+            task_names.append(offdict.get("name", f"offtarget_{len(task_names)}"))
+            role = offdict.get("role", "unknown")
+            task_roles_short.append('t' if role == 'target' else 'o')
+
+    # 6) Call make_animation
+    return make_animation(
+        seq=sub_traj.get("seq"),
+        con=sub_traj.get("con"),
+        xyz=sub_traj.get("xyz"),
+        plddt=sub_traj.get("plddt"),
+        pae=sub_traj.get("pae"),
+
+        pos_ref=pos_ref,
+        extra_pos_refs=extra_pos_refs,
+        extra_xyz=extra_xyz,
+        extra_plddt=extra_plddt,
+        extra_pae=extra_pae,
+
+        length=self._lengths,  # or an integer
+        color_by=color_by,
+        align_xyz=align_xyz,
+        dpi=dpi,
+        struct_names=task_names,
+        roles=task_roles_short
+    )
+
+
+
+
 
   def plot_pdb(self, show_sidechains=False, show_mainchains=False,
                color="pLDDT", color_HP=False, size=(800,480), animate=False,

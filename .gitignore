@@ -1,2 +1,8 @@
 **/.DS_Store
 *.pyc
+all_diffs_unified.diff
+changed_functions.txt
+colabdesign.egg-info/
+collect_differences.sh
+diff_ignore_ws.py
+.qodo

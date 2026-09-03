@@ -8,3 +8,4 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 
 from colabdesign.shared.utils import clear_mem
 from .model import mk_mpnn_model
+from .ligand import mk_ligand_mpnn_model

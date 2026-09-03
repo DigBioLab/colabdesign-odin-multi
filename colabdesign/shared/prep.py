@@ -14,6 +14,8 @@ def prep_pos(pos, residue, chain):
       residue_set += [None]
       chain_set += [i]
       len_set += [i]
+    elif i == '':
+      pass
     else:
       # if chain defined
       if i[0].isalpha():

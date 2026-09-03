@@ -1,0 +1,10 @@
+{
+  "atom_context_num": 25,
+  "noise_level": 0.1,
+  "num_edges": 32,
+  "source_checkpoint": "/tmp/LigandMPNN/model_params/ligandmpnn_v_32_010_25.pt",
+  "source_checkpoint_sha256": "161cd264061fda9680cbb940255522ae42f2966c552d045d87913d9452a80970",
+  "source_commit": "26ec57ac976ade5379920dbd43c7f97a91cf82de",
+  "target_checkpoint": "ColabDesign/colabdesign/mpnn/ligand/weights/v_32_010.pkl",
+  "target_checkpoint_sha256": "1b6f4368a1c72e4a647fd4eda30dfe2867b7ae825c2419fccfd94a1a7c66383c"
+}

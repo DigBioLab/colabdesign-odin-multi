@@ -79,9 +79,76 @@ class _af_loss:
     else:
       align_fn = get_rmsd_loss(inputs, outputs, L=tL)["align"]
 
+
     if self._args["realign"]:
       aux["atom_positions"] = align_fn(aux["atom_positions"]) * aux["atom_mask"][...,None]
+  def _loss_binder_offtarget(self, inputs, outputs, aux):
+    """
+    get losses for off-target interactions
+    (version that does NOT assume self._offtarget_len / self._binder_len)
+    """
+    opt  = inputs["opt"]
+    mask = inputs["seq_mask"]
+    zeros = jnp.zeros_like(mask)
 
+    # Prefer lengths carried in the inputs; fall back to legacy attributes
+    try:
+      otL = int(inputs.get("offtarget_len", getattr(self, "offtarget_len", 0)))
+    except Exception:
+      otL = getattr(self, "offtarget_len", 0)
+    try:
+      bL = int(inputs.get("binder_len_offtarget", getattr(self, "binder_len_offtarget", 0)))
+    except Exception:
+      bL = getattr(self, "binder_len_offtarget", 0)
+
+        # self.offtarget_len  = int(offtarget_len)
+        # self.binder_len_offtarget = int(binder_len_offtarget)
+    # mark the last bL positions as "binder"
+    binder_id = zeros.at[-bL:].set(mask[-bL:])
+
+    if "hotspot" in opt:
+      offtarget_id = zeros.at[opt["hotspot"]].set(mask[opt["hotspot"]])
+      i_con_loss_offtarget = get_con_loss(
+          inputs, outputs, opt["i_con"],
+          mask_1d=offtarget_id, mask_1b=binder_id
+      )
+    else:
+      offtarget_id = zeros.at[:otL].set(mask[:otL])
+      i_con_loss_offtarget = get_con_loss(
+          inputs, outputs, opt["i_con"],
+          mask_1d=binder_id, mask_1b=offtarget_id
+      )
+
+    # unsupervised losses
+    aux["losses"].update({
+        "plddt":   get_plddt_loss(outputs, mask_1d=binder_id),
+        "exp_res": get_exp_res_loss(outputs, mask_1d=binder_id),
+        "pae":     get_pae_loss(outputs, mask_1d=binder_id),
+        "con":     get_con_loss(inputs, outputs, opt["con"], mask_1d=binder_id, mask_1b=binder_id),
+        # interface with the off-target
+        "i_con":   i_con_loss_offtarget,
+        "i_pae":   get_pae_loss(outputs, mask_1d=binder_id, mask_1b=offtarget_id),
+    })
+
+    # If you're "redesigning" the off-target binder, or want supervised losses:
+    if self._args["redesign"]:
+      aln = get_rmsd_loss(inputs, outputs, L=otL, include_L=False)
+      align_fn = aln["align"]
+      aatype = inputs["aatype"]
+      cce = get_dgram_loss(inputs, outputs, aatype=aatype, return_mtx=True)
+      fape = get_fape_loss(inputs, outputs, clamp=opt["fape_cutoff"], return_mtx=True)
+
+      aux["losses"].update({
+        "rmsd":      aln["rmsd"],
+        "dgram_cce": cce[-bL:].sum()  / (mask[-bL:].sum() + 1e-8),
+        "fape":      fape[-bL:].sum() / (mask[-bL:].sum() + 1e-8)
+      })
+    else:
+      align_fn = get_rmsd_loss(inputs, outputs, L=otL)["align"]
+
+
+    if self._args["realign"]:
+      aux["atom_positions"] = align_fn(aux["atom_positions"]) * aux["atom_mask"][...,None]
   def _loss_partial(self, inputs, outputs, aux):
     '''get losses'''    
     opt = inputs["opt"]
