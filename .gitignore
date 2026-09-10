@@ -6,3 +6,4 @@ colabdesign.egg-info/
 collect_differences.sh
 diff_ignore_ws.py
 .qodo
+compare_commits.sh
